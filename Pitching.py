@@ -2,7 +2,7 @@
 Connor Branham
 This is my first entirely original data science project.
 The goal of this project is to answer basic questions about pitching and hitting choices.
-
+Data can be downloaded from: https://www.kaggle.com/pschale/mlb-pitch-data-20152018
 
 """
 import plotly
