@@ -6,7 +6,6 @@ The goal of this project is to answer basic questions about pitching and hitting
 
 """
 import plotly
-plotly.tools.set_credentials_file(username='cbranh', api_key='4zhoRZ5VI17L8sUqCOCV')
 import pandas as pd
 import numpy as np 
 import os
