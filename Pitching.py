@@ -1,17 +1,15 @@
+"""
+Connor Branham
+This is my first entirely original data science project.
+The goal of this project is to answer basic questions about pitching and hitting choices.
+
+
+"""
 import plotly
-import plotly.graph_objs as go
-import plotly.plotly as py
 plotly.tools.set_credentials_file(username='cbranh', api_key='4zhoRZ5VI17L8sUqCOCV')
-from plotly import tools
-from datetime import date
 import pandas as pd
 import numpy as np 
-import plotly.figure_factory as ff
 import os
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-import lightgbm as lgb
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 import random 
@@ -26,56 +24,51 @@ games=pd.read_csv('games.csv')
 pitch=pd.read_csv('pitches.csv', nrows=40_000)
 player=pd.read_csv('player_names.csv')
 
+#The Pitch data frame does not specify the result of the at bat nor does it give the at bat context. Combining these will help later.
 pitchbat=pd.merge(bat, pitch, on='ab_id')
 
+#Dropping null values. In 40,000 observations there are only 122 missing.
 nullcol=pitch.columns[pitch.isnull().any()]
 pitch[nullcol].isnull().sum()
 pitch.dropna()
 
-#pl1=sns.scatterplot(x=pitch.px, y=pitch.pz, data=pitch)
+#Plots pitch location. This is a rather blunt plot, but it does give us some perspective on the variables px and py, which will be valuable later.
+pl1=sns.scatterplot(x=pitch.px, y=pitch.pz, data=pitch)
+pl2=sns.scatterplot(x=pitch.px, y=pitch.pz, data=pitch, hue=pitch.code)
 
-# Creating a data set that consists purely of umpire calls
+
+# Creating a data set that consists purely of umpire calls. This shows the effective strike zone, since all of this pitches were called by the umpire.
 BS= pitch[(pitch['code']=='C') | (pitch['code']=='B')]
-pl2=sns.scatterplot(x=BS.px, y=BS.pz, hue=BS.zone, data=BS, alpha=0.1)
-pl2
-
-BSzone= BS[(BS['zone']>=1) & (BS['zone']<=9)]
-xbin=[-0.5, -0.1666, 0.1666, 0.5]
-ybin=[1.5, 2.3333, 3.16666, 4]
-"""
-pl3=np.histogram2d(BSzone['px'], BSzone['pz'], bins=(xbin, ybin))
+pl3=sns.scatterplot(x=BS.px, y=BS.pz, hue=BS.code, data=BS, alpha=0.1)
 pl3
-fig = plt.figure(figsize=(7, 3))
-ax = fig.add_subplot(131, title='Strike Zone')
-plt.imshow(pl3, interpolation='nearest', origin='low', extent=[xbin[0], xbin[-1], ybin[0], ybin[-1]])
-"""
-plt.hist2d(BSzone['px'], BSzone['pz'], bins=(6,6), cmap=plt.cm.Reds)
 
+#This creates a dataframe that only counts pitches that are considered part of the Data sets "strike zone."
+BSzone= BS[(BS['zone']>=1) & (BS['zone']<=9)]
+
+# This plot shows us the frequency of the pitches if we break the strike zone into 36 squares.
+pl4=plt.hist2d(BSzone['px'], BSzone['pz'], bins=(6,6), cmap=plt.cm.Reds)
 plt.show()
 
-
-strikes= pitchbat[(pitchbat['code']=='C') & ((pitchbat['zone']>=1) &(pitchbat['zone']<=9)) ]
-strikezone=plt.hist2d(strikes['px'], strikes['pz'], bins=(30,30), cmap=plt.cm.Reds)
-strikezone
-plt.show()
+# This data frame consist of only called strikes in the strike zone.
+strikes= pitchbat[(pitchbat['code']=='C') & ((pitchbat['zone']>=1) & (pitchbat['zone']<=9)) ]
 
 #Try to find the percenatge of zone 1,2, and 3 that are called strikes
 BS['strike']=0
 BS['strike'][BS['code']=='C']=1
 BS[(BS['pz']>=3.5)&(BS['pz']<=4)&(BS['px']>=-0.5)&(BS['px']<=0.5)]['strike'].describe()
 
-
+#Alternates between Right and Left pichers
 dbat=['R','L']
 
+# This graphs will show us where the most strikes are thrown depending on the dominant hand of the batter or pitcher.
 for key in dbat:
     for key2 in dbat:
         plt.subplot
         strikezone=plt.hist2d(strikes[((strikes['p_throws']==key)&(strikes['stand']==key2))]['px'], strikes[((strikes['p_throws']==key)&(strikes['stand']==key2))]['pz'], bins=(3,3), cmap=plt.cm.Reds)
-        strikezone3rd=plt.hist2d(pitchbat[((pitchbat['stand']==key2)&(pitchbat['s_count']==2) & ((pitchbat['code']=='C') | (pitchbat['code']=='S')) & ((pitchbat['zone']>=1) &(pitchbat['zone']<=9)) )]['px'], pitchbat[((pitchbat['stand']==key2)&(pitchbat['s_count']==2) & ((pitchbat['code']=='C') | (pitchbat['code']=='S')) & ((pitchbat['zone']>=1) &(pitchbat['zone']<=9)) )]['pz'], bins=(3,3), cmap=plt.cm.Reds)
-        plt.title(key + key2, fontsize=30)
+        plt.title('Pitcher : ' + key + ' Batter : ' + key2, fontsize=30)
         plt.show()
-strikezone3rd
-plt.show()
+
+# This graph shows the difference in pitching location depending on the pitch the pitcher throws.
 dpitch=['FF', 'FT', 'CH', 'CU', 'SL']
 for key in dpitch:
     strikezone=plt.hist2d(strikes[strikes['pitch_type']==key]['px'], strikes[strikes['pitch_type']==key]['pz'], bins=(3,3), cmap=plt.cm.Reds)
@@ -88,9 +81,11 @@ pitchbat.loc[(((pitchbat['code']=='X') | (pitchbat['code']=='E') | (pitchbat['co
 
 
 
-# If the batter swings at a pitch in the zone what is Hit, Out, Foul percentage by zone. In Table form.Split between right hand hitters and left hand hitters
-#Split into right handed batters and left handed batters, since batters hand has a bigger role in pitch location according to the previous graphs
+# If the batter swings at a pitch in the zone, we want to know the frequency of Hit, Out, and Foul percentage by zone.
+#This data frame consist of only pitches that were swung at.
 swing= pitchbat[((pitchbat['code']=='F') | (pitchbat['code']=='S')| (pitchbat['code']=='X')| (pitchbat['code']=='D')| (pitchbat['code']=='E')| (pitchbat['code']=='T')| (pitchbat['code']=='L')| (pitchbat['code']=='W'))]
+swing['Hit']=0
+swing['Hit'][(((pitchbat['event']=='Single') | (pitchbat['event']=='Double') | (pitchbat['event']=='Triple') | (pitchbat['event']=='Home Run')) & ((swing['code']=='X')|(swing['code']=='D')|(swing['code']=='E')))]=1
 swing['HR']=0
 swing['HR'][((swing['event']=='Home Run') & ((swing['code']=='X')|(swing['code']=='D')|(swing['code']=='E')))]=1
 swing['Foul']=0
@@ -98,7 +93,7 @@ swing['Foul'][((swing['code']=='F')|(swing['code']=='T'))]=1
 swing['Out']=0
 swing['Out'][(((swing['code']=='X')|(swing['code']=='D')|(swing['code']=='E')) & ((swing['event']=='Flyout')|(swing['event']=='Groundout')|(swing['event']=='Pop Out')|(swing['event']=='Lineout')|(swing['event']=='Forceout')))]=1
 
-# Do Hit/Out ratio
+# These Matrices will hold the hit percentage, HR percentage, Foul percentage, out percentage, hit to out ratio, and HR to out ratio by zone in the strike zone.
 hitmat= np.zeros((8,3,3))
 HRmat= np.zeros((8,3,3))
 foulmat=np.zeros((8,3,3))
@@ -152,14 +147,13 @@ for matname, mat in matd.items():
         plt.colorbar()
         plt.savefig(matname+key+'.png')
 
-HRmat
 
 os.chdir('C:\\Users\\conno\\Downloads\\PythonProj\\PythonData')
 
 
 BS= BS[['break_angle', 'break_length','end_speed', 'px', 'pz','code']]
 BS=BS.dropna()
-# Using KNN to classify pitches as balls and strikes
+# In Preparation for using KNN, We standardize the variables.
 from sklearn.preprocessing import StandardScaler
 
 scaler=StandardScaler()
@@ -168,7 +162,7 @@ scaled=scaler.transform(BS.drop('code', axis=1))
 kBS=pd.DataFrame(scaled, columns=BS.columns[:-1])
 
 
-
+# Split the data.
 from sklearn.model_selection import train_test_split
 
 X_train, X_test, y_train, y_test=train_test_split(scaled, BS['code'], test_size=0.3)
@@ -177,15 +171,16 @@ from sklearn.neighbors import KNeighborsClassifier
 knn=KNeighborsClassifier(n_neighbors=10)
 knn.fit(X_train, y_train)
 pred = knn.predict(X_test)
-
+#
 from sklearn.metrics import classification_report, confusion_matrix
 
+#Printing the results.
 print(confusion_matrix(y_test, pred))
 
 print(classification_report(y_test,pred))
+#We find that KNN can classify balls with 91 percent accuracy and strikes with 86 percent accuracy.
 
-
-#With only x and y coordinates when crossing the plate
+#We will change the data set to see if the other variables like break affected the umpires calls. Now we will do it using only coordinates, which should be the basis of balls and strikes.
 BS=BS[['px','pz','code']]
 scaler.fit(BS.drop('code', axis=1))
 scaled2=scaler.transform(BS.drop('code', axis=1))
@@ -197,9 +192,8 @@ knn2.fit(X_train2, y_train2)
 pred2 = knn2.predict(X_test2)
 
 print(confusion_matrix(y_test2, pred2))
-
 print(classification_report(y_test2,pred2))
-# It preforms slightly better
+# It preforms slightly better. Ballscan be predicted with 92 percent accuracy and Strikes again with 86 percent accuracy.
 
 # Now compare to SVM classification that would theoretically recreate the strike zone
 
@@ -208,8 +202,8 @@ model = SVC()
 model.fit(X_train2,y_train2)
 predictions = model.predict(X_test2)
 print(confusion_matrix(y_test2,predictions))
-print(classification_report(y_test,predictions))
-# contradiction between confusion matric and the classificaton report
+print(classification_report(y_test2,predictions))
+# This works with a simlar degree of accuracy to KNN. 93 percent for called balls and 86 percent for called strikes.
 
 #Use Grid Search 
 
@@ -222,12 +216,13 @@ grid.best_estimator_
 grid_predictions = grid.predict(X_test)
 print(confusion_matrix(y_test,grid_predictions))
 print(classification_report(y_test,grid_predictions))
-# contradiction between confusion matric and the classificaton report
+# This works with a simlar degree of accuracy to SVM. 92 percent for called balls and 87 percent for called strikes.
 
 #Taking normal pitches : FF 4 seam FB, CH Changeup, CU Curveball, FT Two-seam Fastball, Sl Slider 
+#And taking the most common results : B called Ball, C called strike, F foul, X hit but out, D hit, E hit with RBI, H hit by pitch
 pitch1=pitch[((pitch['pitch_type']=='FF') | (pitch['pitch_type']=='CU')| (pitch['pitch_type']=='CH')| (pitch['pitch_type']=='FT')| (pitch['pitch_type']=='SL'))&((pitch['code']=='B')|(pitch['code']=='C')|(pitch['code']=='F')|(pitch['code']=='X')|(pitch['code']=='D')|(pitch['code']=='E')|(pitch['code']=='B'))]
-#Taking usual results : B called Ball, C called strike, F foul, X hit but out, D hit, E hit with RBI, H hit by pitch
 
+# Check the count of pitch type by balls and strikes.
 pitch1.dropna()
 pitchBS=pitch1[(pitch1['code']=='B') | (pitch1['code']=='T') |(pitch1['code']=='C') |(pitch1['code']=='S') |(pitch1['code']=='F')]
 pitch_counts_S=pitchBS[(pitchBS['code']=='C') | (pitchBS['code']=='S') | (pitchBS['code']=='F') | (pitchBS['code']=='FT')]['pitch_type'].value_counts()
@@ -235,6 +230,7 @@ pitch_counts_B=pitchBS[pitchBS['code']=='B']['pitch_type'].value_counts()
 pitch_counts_S
 pitch_counts_B
 
+plt.clf()
 R=np.arange(5)
 p1=plt.bar(R, pitch_counts_S)
 p2=plt.bar(R, pitch_counts_B, bottom=pitch_counts_S)
@@ -245,9 +241,9 @@ plt.title('Balls and Strikes by Pitch')
 plt.xticks(R, ('FF','SL','FT','CH','CU'))
 plt.legend((p1[0], p2[0]),('Strike', 'Ball'))
 plt.show()
+# There does not appear to be any pitch that is more likely to be a ball than the others.
 
-
-
+# Prepping the pitch data.
 pitch1=pitch1[['pitch_type','b_count','break_angle','break_length','end_speed','outs','pitch_num','px','pz','s_count','spin_dir','spin_rate','start_speed']]
 
 pitch1['change_speed']=pitch1['start_speed']-pitch1['end_speed']
@@ -255,18 +251,12 @@ pitch2=pitch1
 pitch2['pitch_type']=pitch2['pitch_type'].astype('category')
 pitch2=pitch2[['pitch_type','change_speed','b_count','break_angle','break_length','end_speed','outs','pitch_num','px','pz','s_count','spin_dir','spin_rate','start_speed']]
 
-
-
 pitch3=pd.get_dummies(pitch2['pitch_type'])
 pitch2=pitch2[['change_speed','b_count','break_angle','break_length','end_speed','outs','pitch_num','px','pz','s_count','spin_dir','spin_rate','start_speed']]
 
 pitch3['FF'].describe()
 pitch1=pd.concat([pitch2,pitch3], axis=1)
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import classification_report, confusion_matrix
 pit=['FF','CH','CU','FT','SL']
 for i in pit:
     pitchloop=pitch1[[i,'b_count', 'change_speed','break_angle','break_length','end_speed','outs','pitch_num','px','pz','s_count','spin_dir','spin_rate','start_speed']]
@@ -287,8 +277,10 @@ for i in pit:
     print(confusion_matrix(y_test, pred))
     print(classification_report(y_test,pred))
 
+#Using KNN we can predict whether it is a: Slider with 86% accuracy, Two Seam FB with 78% accuracy, Curveball with 89% accuracy, Changeup with 89% accuracy, and four seam fastball with 86% accuracy.
+    
 
-#Train by pitcher and classify pitches by game situation
+#We will use decision tree classification to see if we can predict a pitchers pitch just using the game situation.
 from sklearn.tree import DecisionTreeClassifier
 #from sklearn.ensemble import RandomForestClassifier
 
@@ -303,6 +295,7 @@ pitch2=pd.get_dummies(pitch1['pitch_type'])
 #pitch1=pd.concat([pitch1, pitch2], axis=1)
 pitch1=pitch1.drop('pitch_type', axis=1)
 
+# We can compare the results to the means, which give us the default guess rate of prediction.
 pitch2['FF'].mean()
 pitch2['FT'].mean()
 pitch2['CU'].mean()
@@ -310,12 +303,11 @@ pitch2['CH'].mean()
 pitch2['SL'].mean()
 
 
-#Decision Tree Vizualization
-
-from IPython.display import Image  
+#Decision Tree Vizualization is commented out because it became unwieldy and after seeing it, it appeared unnecessary. 
+"""from IPython.display import Image  
 from sklearn.externals.six import StringIO  
 from sklearn.tree import export_graphviz
-import pydot 
+import pydot """
 
 features= list(pitch1.columns)
 features
@@ -325,11 +317,12 @@ dtree.fit(X_train, y_train)
 pred=dtree.predict(X_test)
 print(confusion_matrix(y_test,pred))
 print(classification_report(y_test,pred))
-dot_data = StringIO()  
+# We can predict Four Seam Fastballs with 51% accuracy. Four Seam fastballs were thrown 44% of the time.
+"""dot_data = StringIO()  
 export_graphviz(dtree, out_file=dot_data,feature_names=features,filled=True,rounded=True)
 
 graph = pydot.graph_from_dot_data(dot_data.getvalue())  
-Image(graph[0].create_png())  
+Image(graph[0].create_png())  """
 for i in pit:
     
     X_train, X_test, y_train, y_test=train_test_split(pitch1, pitch2[i], test_size=0.3)
@@ -343,14 +336,17 @@ for i in pit:
     #print('For Random Forest Classifier ', i , 'results in : ')
     #print(confusion_matrix(y_test,pred))
     #print(classification_report(y_test,pred))
-    dot_data = StringIO()  
+    """dot_data = StringIO()  
     export_graphviz(dtree, out_file=dot_data,feature_names=features,filled=True,rounded=True)
 
     graph = pydot.graph_from_dot_data(dot_data.getvalue())  
-    Image(graph[0].create_png())  
+    Image(graph[0].create_png()) """
+# Slider can be predicted with 27% accuracy (Four Seam fastballs were thrown 18.4% of the time), Two Seam Fastball can be predicted with 26% accuracy (Two Seam fastballs were thrown 15% of the time),
+#Curveball can be predicted with 16% accuracy(Curveballs were thrown 8.6% of the time), and Changeup can be predicted with 21% accuracy (Changeups were thrown 13.6% of the time)
+# So we can predict from the game situation better than random, but not that well.
 
-
-#Classify by Pitcher. Take the 10 pitchers with the most AB
+#Classify by Pitcher. Take the 10 pitchers with the most AB.
+#This is done to see if individual pitchers are more likely to be predictable than an aggregation of all pitchers.
 pitchbat['pitcher_id'].value_counts().head(12)
 pitchbat.dropna()
 pitchers=[285079, 430935, 434671, 446372, 448306, 451596, 456034, 502042, 502188, 572971]
